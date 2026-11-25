@@ -3,16 +3,23 @@ import random
 import time
 import requests
 
-# ================= 1. 環境變數設定 =================
+# ================= 1. 環境變數與商品設定 =================
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
 THREADS_USER_ID = os.environ["THREADS_USER_ID"].strip()
 THREADS_ACCESS_TOKEN = os.environ["THREADS_ACCESS_TOKEN"].strip()
 
+# 若要同步發 IG，請在 GitHub Secrets 填入以下兩個值（沒填則只自動發 Threads）
 IG_USER_ID = os.environ.get("IG_USER_ID", "").strip()
 META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "").strip()
-PRODUCT_IMAGE_URL = os.environ.get("PRODUCT_IMAGE_URL", "").strip()
 
 PRODUCT_URL = "https://miitamed.com/shop/heartwear/?utm_source=social_auto&utm_medium=ai_post&utm_campaign=heartwear"
+
+# 官網商品真實圖片清單（每次發文自動隨機輪播）
+PRODUCT_IMAGES = [
+    "https://miitamed.com/wp-content/uploads/%E8%88%92%E6%A3%89%E8%A1%A3%E6%AD%A3%E9%9D%A22-scaled.jpg",
+    "https://miitamed.com/wp-content/uploads/%E8%88%92%E6%A3%89%E8%A1%A3%E8%83%8C%E9%9D%A2.png",
+    "https://miitamed.com/wp-content/uploads/%E7%99%BC%E7%86%B1%E8%A1%A3-1.png",
+]
 
 ANGLES = [
     "晚上蓋厚被子還是手腳冰冷，直接把遠紅外線熱感衣當暖睡衣穿，不靠厚重堆疊也能一夜好眠",
@@ -72,37 +79,43 @@ def generate_promo_copy() -> str:
     raise RuntimeError(f"❌ Gemini API 呼叫失敗，詳細原因：{last_err}")
 
 
-# ================= 3. 自動發布到 Threads =================
-def post_to_threads(text: str):
+# ================= 3. 自動發布到 Threads（有圖發圖文、無圖發純文字） =================
+def post_to_threads(text: str, image_url: str = ""):
     create_url = f"https://graph.threads.net/v1.0/{THREADS_USER_ID}/threads"
-    create_res = requests.post(create_url, data={
-        "media_type": "TEXT",
+    payload = {
         "text": text,
         "access_token": THREADS_ACCESS_TOKEN
-    }).json()
+    }
+    if image_url:
+        payload["media_type"] = "IMAGE"
+        payload["image_url"] = image_url
+    else:
+        payload["media_type"] = "TEXT"
 
+    create_res = requests.post(create_url, data=payload).json()
     creation_id = create_res.get("id")
     if not creation_id:
         raise RuntimeError(f"❌ Threads 建立貼文失敗：{create_res}")
 
-    time.sleep(3)
+    time.sleep(6 if image_url else 3)
 
     pub_url = f"https://graph.threads.net/v1.0/{THREADS_USER_ID}/threads_publish"
     pub_res = requests.post(pub_url, data={
         "creation_id": creation_id,
         "access_token": THREADS_ACCESS_TOKEN
     }).json()
-    print("✅ Threads 自動發文成功：", pub_res)
+    print(f"✅ Threads 自動發文成功（{'圖文' if image_url else '純文字'}）：", pub_res)
 
 
-# ================= 4. 同步發布圖文到 IG（若有設定圖片網址） =================
-def post_to_ig(caption: str):
-    if not (IG_USER_ID and META_ACCESS_TOKEN and PRODUCT_IMAGE_URL):
+# ================= 4. 同步發布圖文到 IG（需設定 IG Secrets 且有圖片網址） =================
+def post_to_ig(caption: str, image_url: str):
+    if not (IG_USER_ID and META_ACCESS_TOKEN and image_url):
+        print("ℹ️ 尚未設定 IG Secrets，略過 IG 發布。")
         return
 
     create_url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media"
     create_res = requests.post(create_url, data={
-        "image_url": PRODUCT_IMAGE_URL,
+        "image_url": image_url,
         "caption": caption,
         "access_token": META_ACCESS_TOKEN
     }).json()
@@ -111,7 +124,7 @@ def post_to_ig(caption: str):
     if not creation_id:
         raise RuntimeError(f"❌ IG 建立貼文失敗：{create_res}")
 
-    time.sleep(5)
+    time.sleep(6)
 
     pub_url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish"
     pub_res = requests.post(pub_url, data={
@@ -122,7 +135,12 @@ def post_to_ig(caption: str):
 
 
 if __name__ == "__main__":
+    valid_images = [img.strip() for img in PRODUCT_IMAGES if img.strip()]
+    chosen_image = random.choice(valid_images) if valid_images else ""
+    if chosen_image:
+        print("🖼️ 本次隨機選用商品圖：", chosen_image)
+
     copy_text = generate_promo_copy()
     print("📝 本次 AI 生成文案：\n", copy_text)
-    post_to_threads(copy_text)
-    post_to_ig(copy_text)
+    post_to_threads(copy_text, chosen_image)
+    post_to_ig(copy_text, chosen_image)
