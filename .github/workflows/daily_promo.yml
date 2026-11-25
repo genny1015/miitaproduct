@@ -1,0 +1,25 @@
+name: Auto Promo MiiTA Heartwear
+
+on:
+  schedule:
+    - cron: '0 12 * * *'  # 每天台灣時間晚上 20:00 自動執行
+  workflow_dispatch:      # 允許隨時手動按按鈕測試
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Run AI Auto Publisher
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          PRODUCT_IMAGE_URL: ${{ secrets.PRODUCT_IMAGE_URL }}
+        run: python auto_promo.py
