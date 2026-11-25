@@ -23,6 +23,22 @@ ANGLES = [
 
 
 # ================= 2. 免費 Gemini API 自動寫高轉換文案 =================
+def get_available_models() -> list[str]:
+    candidates = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.0-flash"]
+    try:
+        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+        data = requests.get(list_url, timeout=15).json()
+        for m in data.get("models", []):
+            name = m.get("name", "").replace("models/", "")
+            methods = m.get("supportedGenerationMethods", [])
+            if "generateContent" in methods and "flash" in name and "lite" not in name:
+                if name not in candidates:
+                    candidates.append(name)
+    except Exception as e:
+        print(f"⚠️ 取得模型清單略過：{e}")
+    return candidates
+
+
 def generate_promo_copy() -> str:
     angle = random.choice(ANGLES)
     prompt = f"""
@@ -40,20 +56,18 @@ def generate_promo_copy() -> str:
 3. 結尾放上明確行動呼籲與商品下單網址：{PRODUCT_URL}
 4. 字數控制在 130~180 字，台灣自然口語、有說服力，文末加 2 個相關 hashtag 即可。不要輸出任何前言或標題，直接給貼文內容。
 """
-    # 依序嘗試免費層可用的 Gemini 模型
-    models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
     last_err = None
-
-    for model in models:
+    for model in get_available_models():
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
         resp = requests.post(url, json={
             "contents": [{"parts": [{"text": prompt}]}]
         }).json()
 
         if "candidates" in resp:
+            print(f"✅ 使用模型：{model}")
             return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
         last_err = resp
-        print(f"⚠️ 模型 {model} 回應異常，嘗試下一個：{resp}")
+        print(f"⚠️ 模型 {model} 略過：{resp.get('error', {}).get('message', resp)}")
 
     raise RuntimeError(f"❌ Gemini API 呼叫失敗，詳細原因：{last_err}")
 
