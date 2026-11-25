@@ -22,4 +22,4 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           PRODUCT_IMAGE_URL: ${{ secrets.PRODUCT_IMAGE_URL }}
-        run: python auto_promo.py
+        run: python -u auto_promo.py
