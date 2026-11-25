@@ -4,14 +4,13 @@ import time
 import requests
 
 # ================= 1. 環境變數設定 =================
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-THREADS_USER_ID = os.environ["THREADS_USER_ID"]
-THREADS_ACCESS_TOKEN = os.environ["THREADS_ACCESS_TOKEN"]
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"].strip()
+THREADS_USER_ID = os.environ["THREADS_USER_ID"].strip()
+THREADS_ACCESS_TOKEN = os.environ["THREADS_ACCESS_TOKEN"].strip()
 
-# 若要同時發 IG，請填入以下三個值（沒填則只自動發 Threads）
-IG_USER_ID = os.environ.get("IG_USER_ID", "")
-META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "")
-PRODUCT_IMAGE_URL = os.environ.get("PRODUCT_IMAGE_URL", "")  # 官網熱感衣圖片公開網址
+IG_USER_ID = os.environ.get("IG_USER_ID", "").strip()
+META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "").strip()
+PRODUCT_IMAGE_URL = os.environ.get("PRODUCT_IMAGE_URL", "").strip()
 
 PRODUCT_URL = "https://miitamed.com/shop/heartwear/?utm_source=social_auto&utm_medium=ai_post&utm_campaign=heartwear"
 
@@ -26,8 +25,6 @@ ANGLES = [
 # ================= 2. 免費 Gemini API 自動寫高轉換文案 =================
 def generate_promo_copy() -> str:
     angle = random.choice(ANGLES)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-
     prompt = f"""
 你是一位台灣機能服飾品牌行銷企劃，請為「MiiTA 醫創達 遠紅外線熱感衣」寫一篇能讓人想直接點擊下單的社群貼文。
 
@@ -43,11 +40,22 @@ def generate_promo_copy() -> str:
 3. 結尾放上明確行動呼籲與商品下單網址：{PRODUCT_URL}
 4. 字數控制在 130~180 字，台灣自然口語、有說服力，文末加 2 個相關 hashtag 即可。不要輸出任何前言或標題，直接給貼文內容。
 """
-    resp = requests.post(url, json={
-        "contents": [{"parts": [{"text": prompt}]}]
-    }).json()
+    # 依序嘗試免費層可用的 Gemini 模型
+    models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    last_err = None
 
-    return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+        resp = requests.post(url, json={
+            "contents": [{"parts": [{"text": prompt}]}]
+        }).json()
+
+        if "candidates" in resp:
+            return resp["candidates"][0]["content"]["parts"][0]["text"].strip()
+        last_err = resp
+        print(f"⚠️ 模型 {model} 回應異常，嘗試下一個：{resp}")
+
+    raise RuntimeError(f"❌ Gemini API 呼叫失敗，詳細原因：{last_err}")
 
 
 # ================= 3. 自動發布到 Threads =================
@@ -61,7 +69,7 @@ def post_to_threads(text: str):
 
     creation_id = create_res.get("id")
     if not creation_id:
-        raise RuntimeError(f"Threads 建立貼文失敗：{create_res}")
+        raise RuntimeError(f"❌ Threads 建立貼文失敗：{create_res}")
 
     time.sleep(3)
 
@@ -87,7 +95,7 @@ def post_to_ig(caption: str):
 
     creation_id = create_res.get("id")
     if not creation_id:
-        raise RuntimeError(f"IG 建立貼文失敗：{create_res}")
+        raise RuntimeError(f"❌ IG 建立貼文失敗：{create_res}")
 
     time.sleep(5)
 
